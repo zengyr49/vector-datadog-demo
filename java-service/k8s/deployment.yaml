@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
       - name: vector-demo-service
-        image: vector-demo-service:1.0.0
+        image: image.company.com/midea-middleware/vector-demo-service:1.0.0
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8080

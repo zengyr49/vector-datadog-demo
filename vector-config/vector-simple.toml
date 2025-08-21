@@ -1,9 +1,9 @@
-# Vector配置文件 - 用于收集Java服务日志
+# Vector 简化配置文件 - 专门收集 vector-demo-service 的日志
 
 # 全局配置
 data_dir = "/vector-data-dir"
 
-# API配置
+# API 配置
 [api]
 enabled = true
 address = "0.0.0.0:8686"
@@ -14,23 +14,17 @@ level_key = "level"
 message_key = "message"
 timestamp_key = "timestamp"
 
-# 源配置 - 收集Kubernetes Pod日志
+# 源配置：收集 Kubernetes 日志
 [sources.kubernetes_logs]
 type = "kubernetes_logs"
 glob_minimum_cooldown_ms = 1000
 
-# 源配置 - 收集容器标准输出日志
-[sources.container_logs]
-type = "file"
-include = ["/var/log/containers/*.log"]
-read_from = "beginning"
-
-# 转换配置 - 解析JSON日志
-[transforms.parse_json_logs]
+# 转换配置：解析和增强日志
+[transforms.parse_and_enhance]
 type = "remap"
 inputs = ["kubernetes_logs"]
 source = '''
-# 尝试解析JSON格式的日志
+# 尝试解析 JSON 格式的日志
 if exists(.message) {
   parsed = parse_json!(.message)
   if exists(parsed) {
@@ -42,38 +36,25 @@ if exists(.message) {
 .timestamp = now()
 
 # 添加服务标识
-.service = "vector-demo"
+.service = "vector-demo-service"
+.business_service = "vector-demo"
 
 # 标准化日志级别
 if exists(.level) {
   .level = upcase(.level)
 }
 
-# 添加Kubernetes元数据
+# 添加 Kubernetes 元数据
 if exists(.kubernetes) {
   .pod_name = .kubernetes.pod_name
   .namespace = .kubernetes.namespace_name
   .container_name = .kubernetes.container_name
 }
-'''
 
-# 转换配置 - 过滤和增强日志
-[transforms.filter_logs]
-type = "filter"
-inputs = ["parse_json_logs"]
-condition = '''
-# 只处理vector-demo相关的日志
-exists(.service) && .service == "vector-demo"
-'''
-
-# 转换配置 - 添加业务字段
-[transforms.add_business_fields]
-type = "remap"
-inputs = ["filter_logs"]
-source = '''
 # 添加业务相关字段
 .business_unit = "demo"
 .environment = "kubernetes"
+.collection_timestamp = now()
 
 # 如果是错误日志，添加错误分类
 if exists(.level) && .level == "ERROR" {
@@ -93,35 +74,32 @@ if exists(.message) {
     .business_type = "general"
   }
 }
+
+# 添加日志来源信息
+.log_source = "vector-demo-service"
+.log_collector = "vector-agent"
 '''
 
-# 输出配置 - 控制台输出（用于调试）
+# 转换配置：过滤只保留 vector-demo 相关日志
+[transforms.filter_demo_logs]
+type = "filter"
+inputs = ["parse_and_enhance"]
+condition = '''
+# 只处理 vector-demo 相关的日志
+exists(.business_service) && .business_service == "vector-demo"
+'''
+
+# 输出配置 1: 控制台输出（用于调试和实时监控）
 [sinks.console_output]
 type = "console"
-inputs = ["add_business_fields"]
+inputs = ["filter_demo_logs"]
 encoding.codec = "json"
 encoding.timestamp_format = "rfc3339"
 
-# 输出配置 - 文件输出
+# 输出配置 2: 文件输出（持久化存储）
 [sinks.file_output]
 type = "file"
-inputs = ["add_business_fields"]
-path = "/var/log/vector/processed-logs.log"
+inputs = ["filter_demo_logs"]
+path = "/var/log/vector/vector-demo-logs.log"
 encoding.codec = "json"
 encoding.timestamp_format = "rfc3339"
-
-# 输出配置 - 可选：发送到Elasticsearch
-# [sinks.elasticsearch]
-# type = "elasticsearch"
-# inputs = ["add_business_fields"]
-# endpoint = "http://elasticsearch:9200"
-# index = "vector-demo-logs-%Y-%m-%d"
-# encoding.codec = "json"
-
-# 输出配置 - 可选：发送到Kafka
-# [sinks.kafka]
-# type = "kafka"
-# inputs = ["add_business_fields"]
-# bootstrap_servers = ["kafka:9092"]
-# topic = "vector-demo-logs"
-# encoding.codec = "json"

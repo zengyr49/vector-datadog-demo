@@ -1,5 +1,5 @@
 # 使用OpenJDK 21作为基础镜像
-FROM openjdk:21-slim
+FROM image.midea.com/t-mahas-public/prd/custom-jdk:21
 
 # 设置工作目录
 WORKDIR /app
@@ -7,11 +7,6 @@ WORKDIR /app
 # 设置环境变量
 ENV JAVA_OPTS="-Xmx512m -Xms256m"
 ENV TZ=Asia/Shanghai
-
-# 安装必要的工具
-RUN apt-get update && apt-get install -y \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
 
 # 复制JAR文件
 COPY java-service/target/vector-demo-service-1.0.0.jar app.jar
