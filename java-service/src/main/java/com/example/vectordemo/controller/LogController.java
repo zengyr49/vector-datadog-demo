@@ -1,24 +1,52 @@
 package com.example.vectordemo.controller;
 
 import com.example.vectordemo.service.LogService;
+import io.cloudevents.CloudEvent;
+import io.cloudevents.core.builder.CloudEventBuilder;
+import io.cloudevents.core.format.ContentType;
+import io.cloudevents.core.provider.EventFormatProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.beans.factory.annotation.Autowired;
 
+import java.net.URI;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/logs")
 public class LogController {
 
     private static final Logger logger = LoggerFactory.getLogger(LogController.class);
+
+    private static final String CLOUD_EVENT_SOURCE = "JAVA-SERVICE-LOG-CONTROLLER"; // 替换为实际的事件源
     
     @Autowired
     private LogService logService;
+
+    /**
+     * 生成CloudEvent日志
+     * @return ResponseEntity<Map<String, Object>>
+     */
+    @PostMapping("/cloudevent")
+    public ResponseEntity<Map<String, Object>> generateCloudEventLog() {
+        // 写入cloudevents
+        CloudEvent event = CloudEventBuilder.v1()
+                .withId(UUID.randomUUID().toString())
+                .withSource(URI.create(CLOUD_EVENT_SOURCE))
+                .withType("com.example.vectordemo.log.testType")
+                .withTime(OffsetDateTime.now())
+                .withData("application/json", "{\"message\":\"测试日志事件cclloouuddeevveenntt\"}".getBytes())
+                .build();
+        byte[] jsonEvent = EventFormatProvider.getInstance().resolveFormat(ContentType.JSON).serialize(event);
+        logger.info(new String(jsonEvent));
+        return ResponseEntity.ok(new HashMap<>());
+    }
 
     /**
      * 测试日志写入接口
