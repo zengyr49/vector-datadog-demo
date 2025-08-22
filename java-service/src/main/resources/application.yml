@@ -5,6 +5,7 @@ spring:
   application:
     name: vector-demo-service
 
+
 logging:
   level:
     root: INFO
@@ -27,5 +28,5 @@ management:
       exposure:
         include: health,info,metrics
   endpoint:
-    health:
-      show-details: always
+    mappings:
+      enabled: true

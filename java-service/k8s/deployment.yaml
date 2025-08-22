@@ -12,13 +12,17 @@ spec:
       app: vector-demo-service
   template:
     metadata:
+      annotations:
+        # only for ga-test-1
+        ovn.kubernetes.io/logical_router: vpc-esrwkgr69n9c
+        ovn.kubernetes.io/logical_switch: sbn-esrwkiqhdam8
       labels:
         app: vector-demo-service
         version: v1
     spec:
       containers:
       - name: vector-demo-service
-        image: image.company.com/midea-middleware/vector-demo-service:1.0.0
+        image: image.company.com/company-middleware/vector-demo-service:1.0.0
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8080
@@ -67,7 +71,6 @@ spec:
   ports:
   - port: 8080
     targetPort: 8080
-    nodePort: 30080
     protocol: TCP
     name: http
   selector:

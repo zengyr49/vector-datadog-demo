@@ -1,0 +1,128 @@
+{{- if not .Values.existingConfigMaps }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "vector.fullname" . }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "vector.labels" . | nindent 4 }}
+data:
+  {{- if .Values.customConfig }}
+  vector.yaml: |
+{{ tpl (toYaml .Values.customConfig) . | indent 4 }}
+  {{- else if or (eq .Values.role "Aggregator") (eq .Values.role "Stateless-Aggregator") }}
+  aggregator.yaml: |
+    data_dir: /vector-data-dir
+    api:
+      enabled: true
+      address: 127.0.0.1:8686
+      playground: false
+    sources:
+      datadog_agent:
+        address: 0.0.0.0:8282
+        type: datadog_agent
+      fluent:
+        address: 0.0.0.0:24224
+        type: fluent
+      internal_metrics:
+        type: internal_metrics
+      logstash:
+        address: 0.0.0.0:5044
+        type: logstash
+      splunk_hec:
+        address: 0.0.0.0:8080
+        type: splunk_hec
+      statsd:
+        address: 0.0.0.0:8125
+        mode: tcp
+        type: statsd
+      syslog:
+        address: 0.0.0.0:9000
+        mode: tcp
+        type: syslog
+      vector:
+        address: 0.0.0.0:6000
+        type: vector
+        version: "2"
+    sinks:
+      prom_exporter:
+        type: prometheus_exporter
+        inputs: [internal_metrics]
+        address: 0.0.0.0:9090
+      stdout:
+        type: console
+        inputs: [datadog_agent, fluent, logstash, splunk_hec, statsd, syslog, vector]
+        encoding:
+          codec: json
+  {{- else if (eq .Values.role "Agent") }}
+  agent.yaml: |
+    data_dir: /vector-data-dir
+    api:
+      enabled: true
+      address: 127.0.0.1:8686
+      playground: false
+    sources:
+      # 源配置 1: 收集 Kubernetes 日志
+      #kubernetes_logs:
+    #    type: kubernetes_logs
+      # 源配置 2: 收集文件日志（如果容器内日志文件需要收集）
+      #file_logs:
+      #  type: "file"
+      #  include: ["/var/log/containers/vector-demo-service-*_vector-service-demo_*.log"]
+      #  read_from: "beginning"
+      kubernetes_logs:
+        type: kubernetes_logs
+        extra_label_selector: "app=vector-demo-service"
+      host_metrics:
+        filesystem:
+          devices:
+            excludes: [binfmt_misc]
+          filesystems:
+            excludes: [binfmt_misc]
+          mountpoints:
+            excludes: ["*/proc/sys/fs/binfmt_misc"]
+        type: host_metrics
+      internal_metrics:
+        type: internal_metrics
+    # 转换配置：解析和增强日志
+    transforms:
+      parse_and_enhance:
+        type: "remap"
+        inputs: ["kubernetes_logs"]
+        source: |
+          # 将 Kubernetes 日志转换为 cloud event json格式
+          . = {
+            "specversion": "1.0",
+            "type": "kubernetes_log",
+            "source": .kubernetes.pod_name,
+            "id": uuid_v4(),
+            "time": .timestamp,
+            "datacontenttype": "application/json",
+            "data": .message
+          }
+      # 转换配置：过滤只保留 vector-demo 相关日志
+      #filter_demo_logs:
+      #  type: "filter"
+      #  inputs: ["parse_and_enhance"]
+      #  condition: |
+      #    # 只处理 vector-demo 相关的日志
+      #    exists(.business_service) && .business_service == "vector-demo"
+
+    sinks:
+      prom_exporter:
+        type: prometheus_remote_write
+        inputs: [host_metrics, internal_metrics]
+        endpoint: http://10.23.106.76:9090/api/v1/write
+      stdout:
+        type: console
+        inputs: [parse_and_enhance, host_metrics]
+        encoding:
+          codec: json
+      greptime_id:
+        type: greptimedb_logs
+        inputs: [parse_and_enhance]
+        endpoint: http://10.226.0.54:30000
+        dbname: demo_cloud_event
+        table: demo_table
+  {{- end }}
+{{- end }}
