@@ -118,7 +118,7 @@ data:
         inputs: [parse_and_enhance, host_metrics]
         encoding:
           codec: json
-      greptime_id:
+      greptime_db:
         type: greptimedb_logs
         inputs: [parse_and_enhance]
         endpoint: http://10.226.0.54:30000

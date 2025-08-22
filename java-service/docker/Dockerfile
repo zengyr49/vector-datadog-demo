@@ -1,5 +1,5 @@
 # 使用OpenJDK 21作为基础镜像
-FROM image.company.com/t-mahas-public/prd/custom-jdk:21
+FROM image.midea.com/t-mahas-public/prd/custom-jdk:21
 
 # 设置工作目录
 WORKDIR /app
