@@ -5,7 +5,7 @@
 ## 🎯 项目目标
 
 - **学习 Vector**: 了解 Vector 的核心概念和配置方法
-- **日志收集**: 演示 Vector 如何收集 Kubernetes 中的 Java 服务日志
+- **日志收集**: 演示 Vector的agent模式 如何收集 Kubernetes 中的 Java 服务日志
 - **日志转换**: 展示 Vector 的日志解析、过滤和增强功能
 - **多输出**: 实现日志同时输出到控制台、文件等不同目标
 - **实践应用**: 通过实际项目学习 Vector 的最佳实践
@@ -54,12 +54,84 @@ vector-demo/
 │       └── deployment.yaml     # 部署和服务配置
 ├── docker/                      # Docker 相关文件
 │   └── Dockerfile              # Java 服务容器化配置
-├── scripts/                     # 部署和测试脚本
-│   ├── deploy.sh               # 项目部署脚本
-│   └── test.sh                 # 功能测试脚本
 └── vector-config/               # Vector 配置示例
     └── vector-simple.toml      # Vector 配置文件
 ```
+
+## 🏃‍♂️ 快速开始
+### 依赖命令
+```
+helm
+maven
+docker
+kubectl
+```
+### 依赖组件
+```
+# 必须
+Kubernetes > 1.9 # 可以选择本地的minikube或者真实的k8s集群或者随便k3s集群之流
+Java
+
+# 可选
+Prometheus
+GreptimeDB
+```
+### 1、安装vector
+#### 1.1 更换./vector/values.yaml中的镜像，没有内网镜像就：
+```shell
+# 将image.repository设置为timberio/vector
+# 将image.tag设置为""（空）
+```
+#### 1.2 helm安装vector
+```shell
+helm install vector ./vector --namespace vector --create-namespace
+```
+然后自行用k9s或者kubectl查看部署状态！Running就是跑起来了。
+```shell
+kubectl get pods -l app.kubernetes.io/name=vector -n vector
+```
+
+### 2、打包和部署Java Demo服务
+```shell
+# 进入java项目打包成jar包
+cd java-service
+mvn clean install
+
+# 用Dockerfile打包镜像
+docker build -t vector-demo-service:1.0.0 . -f ./docker/Dockerfile --platform linux/amd64
+
+# 打包和推送镜像，自选。
+docker images # 查看刚打包好的image id
+docker tag <你刚打包好的image id> image.<company>.com/<company>-middleware/vector-demo-service:1.0.0
+docker push image.<company>.com/<company>-middleware/vector-demo-service:1.0.0
+
+# kubectl部署服务
+# kubectl delete -f ./k8s/deployment.yaml -n vector-service-demo
+kubectl apply -f ./k8s/deployment.yaml -n vector-service-demo
+```
+
+### 3、查看各种
+#### 3.1 调用java服务写日志 -> vector日志console有打印
+```shell
+# 在一个terminal A输入，持续查看日志
+kubectl logs -l app.kubernetes.io/name=vector -n vector -f | grep INFO
+
+```
+
+```shell
+# 在另一个terminal B输入，触发生成一条info日志
+curl -X POST http://<your ip>:8080/api/logs/cloudevent
+```
+
+稍等一会则可以在A中可以看到了一条INFO等级的信息
+
+数据流动是 Java Demo Service -> Vector -> Console
+
+#### *3.2 查看prometheus、greptimedb
+在configmap中已经留了日志转发到 prometheus和greptimedb 的配置，可以直接在上面写上你的prometheus或greptimedb的服务器地址，则可以将数据传输到对应的组件中。
+
+prometheus用于承接metrics，greptimedb承接log。而greptimedb也可以作为时序数据库，承接来自prometheus的remote write的metrics数据，落库持久化。
+
 
 ## 🔧 技术栈
 
@@ -80,16 +152,18 @@ vector-demo/
   - `POST /api/logs/test` - 生成测试日志
   - `POST /api/logs/custom` - 写入自定义日志
   - `GET /api/logs/health` - 健康检查
+  - `POST /api/logs/cloudevent` - 写入cloudevent格式的日志（只有消息体是cloudevent格式，实际没什么用）
 
-- **日志特性**：
-  - 多级别日志（TRACE, DEBUG, INFO, WARN, ERROR）
-  - CloudEvents JSON 格式输出
-  - 结构化业务日志（订单、支付、库存等）
-  - 自动日志轮转和持久化
+  例如
+  ```shell
+  curl -X POST http://<your ip>:8080/api/logs/custom?level=ERROR&message=someMessage
+  curl -X POST http://<your ip>:8080/api/logs/test
+  curl -X POST http://<your ip>:8080/api/logs/cloudevent
+  ```
 
 ### 2. Vector 日志收集
 
-- **自动收集**: 通过 DaemonSet 收集所有 Pod 日志
+- **自动收集**: 通过 DaemonSet 收集 java-demo-service的 Pod 日志
 - **智能解析**: 自动解析 JSON 格式日志
 - **字段增强**: 添加业务元数据和 Kubernetes 信息
 - **灵活输出**: 支持控制台、文件、Prometheus 等多种输出目标
@@ -100,45 +174,6 @@ vector-demo/
 - **Kubernetes 编排**: Deployment 和 Service 配置
 - **健康检查**: Liveness 和 Readiness 探针
 - **资源管理**: CPU 和内存限制配置
-
-## 📚 学习要点
-
-### 1. Vector 核心概念
-
-- **Sources（源）**: 数据输入源，如 Kubernetes 日志、文件等
-- **Transforms（转换）**: 数据处理和转换，如过滤、解析、重映射等
-- **Sinks（输出）**: 数据输出目标，如控制台、文件、数据库等
-- **VRL 语言**: Vector 的配置语言，用于数据转换
-
-### 2. Kubernetes 日志管理
-
-- **容器日志收集**: 标准输出和错误输出
-- **DaemonSet 模式**: 每个节点运行日志收集器
-- **日志持久化**: HostPath 和 EmptyDir 卷管理
-- **权限管理**: RBAC 和服务账户配置
-
-### 3. 微服务日志策略
-
-- **结构化日志**: JSON 格式便于解析和分析
-- **日志级别**: 合理的日志分级和过滤策略
-- **业务标识**: 在日志中添加业务上下文信息
-- **性能考虑**: 异步日志和批量处理
-
-## 🎯 适用场景
-
-- **学习 Vector**: 初学者了解 Vector 的基本概念和配置
-- **日志收集实践**: 实际项目中实现日志收集和分析
-- **微服务监控**: 构建基于日志的微服务监控体系
-- **DevOps 实践**: 学习容器化部署和日志管理
-- **云原生架构**: 理解云原生应用中的日志处理流程
-
-## 🔍 项目特色
-
-- **完整示例**: 从 Java 服务到 Vector 配置的完整链路
-- **实用性强**: 基于实际业务场景的日志生成和处理
-- **配置灵活**: 支持多种输出目标和转换规则
-- **易于扩展**: 模块化设计，便于添加新功能
-- **最佳实践**: 遵循 Vector 和 Kubernetes 的最佳实践
 
 ## 📖 相关资源
 
