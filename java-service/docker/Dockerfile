@@ -1,5 +1,5 @@
 # 使用OpenJDK 21作为基础镜像
-FROM image.midea.com/t-mahas-public/prd/custom-jdk:21
+FROM image.company.com/t-mahas-public/prd/custom-jdk:21
 
 # 设置工作目录
 WORKDIR /app
@@ -9,7 +9,7 @@ ENV JAVA_OPTS="-Xmx512m -Xms256m"
 ENV TZ=Asia/Shanghai
 
 # 复制JAR文件
-COPY java-service/target/vector-demo-service-1.0.0.jar app.jar
+COPY /target/vector-demo-service-1.0.0.jar app.jar
 
 # 创建日志目录
 RUN mkdir -p /app/logs
